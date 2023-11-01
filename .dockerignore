@@ -1,5 +1,4 @@
 ./target
-sample.json
 .gitattributes
 .gitignore
 Cargo.lock
