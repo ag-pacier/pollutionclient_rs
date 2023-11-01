@@ -61,9 +61,9 @@ impl Config {
         };
         let config_timing: String = match env::var("OPENWEATHER_POLL_TIMING") {
             Ok(timing) => timing,
-            Err(_) => "60".to_string(),
+            Err(_) => "3600".to_string(),
         };
-        current_config.set_timing(config_timing.parse::<u64>().unwrap_or(60));
+        current_config.set_timing(config_timing.parse::<u64>().unwrap_or(3600));
         Ok(current_config)
     }
 }
