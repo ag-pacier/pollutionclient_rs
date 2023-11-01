@@ -1,4 +1,4 @@
-FROM rust:bookworm
+FROM rust:slim-bookworm
 
 WORKDIR /usr/src/pollutionclient_rs
 COPY . .
