@@ -1,5 +1,5 @@
 use ureq;
-use std::{env, fmt::format};
+use std::env;
 use serde::Deserialize;
 
 #[derive(Clone, Debug)]
@@ -88,7 +88,18 @@ struct MainAqi {
     aqi: i8,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct PollList {
+    dt: i32,
+    main: MainAqi,
+    components: Components,
+}
 
+#[derive(Clone, Debug, Deserialize)]
+struct PollResponse {
+    coord: Vec<f32>,
+    list: PollList,
+}
 
 fn main() {
     let running_config: Config = match Config::parse_env() {
