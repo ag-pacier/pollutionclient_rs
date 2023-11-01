@@ -71,6 +71,23 @@ fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<Zi
     Ok(response)
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct Components {
+    co: f32,
+    no: f32,
+    no2: f32,
+    o3: f32,
+    so2: f32,
+    pm2_5: f32,
+    pm10: f32,
+    nh3: f32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct MainAqi {
+    aqi: i8,
+}
+
 fn main() {
     let running_config: Config = Config::parse_env().unwrap();
     
