@@ -2,7 +2,7 @@ use ureq;
 use std::{env, thread, time::Duration};
 use std::fmt;
 use serde::Deserialize;
-use influxdb::{Client, Timestamp};
+use influxdb::{Client, WriteQuery, Error};
 use influxdb::InfluxDbWriteable;
 use chrono::{DateTime, Utc};
 
@@ -11,11 +11,15 @@ struct Config {
     apikey: Option<String>,
     location: Option<ZipLoc>,
     timing: u64,
+    dbname: Option<String>,
+    dbserver: Option<String>,
+    dbuser: Option<String>,
+    dbpass: Option<String>,
 }
 
 impl Config {
     fn new() -> Config {
-        Config { apikey: None, location: None, timing: 60 }
+        Config { apikey: None, location: None, timing: 60, dbname: None, dbserver: None, dbuser: None, dbpass: None }
     }
     fn set_loc(&mut self, new_loc: ZipLoc) -> () {
         self.location = Some(new_loc);
@@ -25,6 +29,28 @@ impl Config {
     }
     fn set_timing(&mut self, new_timing: u64) -> () {
         self.timing = new_timing;
+    }
+    fn set_dbname(&mut self, new_dbname: String) -> () {
+        self.dbname = Some(new_dbname);
+    }
+    fn set_dbuser(&mut self, new_dbuser: String) -> () {
+        self.dbuser = Some(new_dbuser);
+    }
+    fn set_dbpass(&mut self, new_dbpass: String) -> () {
+        self.dbpass = Some(new_dbpass);
+    }
+    fn set_dbserver(&mut self, new_dbserver: String) -> () {
+        let mut final_server: String = String::new();
+        if new_dbserver.starts_with("http://") {
+            final_server = new_dbserver.clone();
+        } else {
+            final_server = format!("http://{}", &new_dbserver);
+        };
+        let colon_check: Vec<&str> = new_dbserver.rsplit(":").collect();
+        if colon_check.len() < 3 {
+            final_server = format!("{}:8086", final_server);
+        }
+        self.dbserver = Some(final_server);
     }
     fn get_key(&self) -> String {
         match &self.apikey {
@@ -40,6 +66,18 @@ impl Config {
     }
     fn get_timing(&self) -> u64 {
         self.timing
+    }
+    fn get_dbserver(&self) -> String {
+        match &self.dbserver {
+            Some(server) => server.to_owned(),
+            None => "http://localhost:8086".to_string(),
+        }
+    }
+    fn get_dbname(&self) -> String {
+        match &self.dbname {
+            Some(name) => name.to_owned(),
+            None => "test".to_string(),
+        }
     }
     fn parse_env() -> Result<Config, ureq::Error> {
         let mut current_config: Config = Config::new();
@@ -67,6 +105,34 @@ impl Config {
             Err(_) => "3600".to_string(),
         };
         current_config.set_timing(config_timing.parse::<u64>().unwrap_or(3600));
+        let new_dbname: Option<String> = match env::var("OPENWEATHER_INFLUXDB_NAME") {
+            Ok(name) => Some(name),
+            Err(_) => None,
+        };
+        if new_dbname.is_some() {
+            current_config.set_dbname(new_dbname.unwrap());
+        };
+        let new_dbserver: Option<String> = match env::var("OPENWEATHER_INFLUXDB_SERVER") {
+            Ok(name) => Some(name),
+            Err(_) => None,
+        };
+        if new_dbserver.is_some() {
+            current_config.set_dbserver(new_dbserver.unwrap());
+        };
+        let new_dbuser: Option<String> = match env::var("OPENWEATHER_INFLUXDB_DBUSER") {
+            Ok(name) => Some(name),
+            Err(_) => None,
+        };
+        if new_dbuser.is_some() {
+            current_config.set_dbuser(new_dbuser.unwrap());
+        };
+        let new_dbpass: Option<String> = match env::var("OPENWEATHER_INFLUXDB_DBPASS") {
+            Ok(pass) => Some(pass),
+            Err(_) => None,
+        };
+        if new_dbpass.is_some() {
+            current_config.set_dbpass(new_dbpass.unwrap());
+        };
         Ok(current_config)
     }
 }
@@ -137,6 +203,20 @@ impl fmt::Display for PollResponse {
     }
 }
 
+#[derive(InfluxDbWriteable)]
+struct PollUpdate {
+    time: DateTime<Utc>,
+    #[influxdb(tag)] aqi: i8,
+    co: f32,
+    no: f32,
+    no2: f32,
+    o3: f32,
+    so2: f32,
+    pm2_5: f32,
+    pm10: f32,
+    nh3: f32,
+}
+
 fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<ZipLoc, ureq::Error> {
     let url: String = format!("http://api.openweathermap.org/geo/1.0/zip?zip={zip},{country}&appid={apikey}");
     let response: ZipLoc = ureq::get(&url).call()?.into_json()?;
@@ -146,6 +226,18 @@ fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<Zi
 fn get_pollution(url: &str) -> Result<PollResponse, ureq::Error> {
     let response: PollResponse = ureq::get(url).call()?.into_json()?;
     Ok(response)
+}
+
+async fn write_to_db(dbclient: &Client, aqi: i8, pollution: Components) -> Result<String, Error> {
+    let dbupdate: WriteQuery = PollUpdate { time: Utc::now(),
+         aqi: aqi, co: pollution.co, no: pollution.no, no2: pollution.no2, o3: pollution.o3, so2: pollution.so2,
+         pm2_5: pollution.pm2_5, pm10: pollution.pm10, nh3: pollution.nh3 }.into_query("pollution");
+
+    let internal_client = dbclient.clone();
+    
+    let result = internal_client.query(dbupdate).await?;
+
+    Ok(result)
 }
 
 fn main() {
@@ -165,6 +257,30 @@ fn main() {
     if running_coords == ["0".to_string(), "0".to_string()] {
         panic!("Default coordinates obtained. Likely unable to find correct location. Please double check location vars and try again.")
     };
+
+    match &running_config.dbserver {
+        Some(conf_server) => println!("InfluxDB added: {}", conf_server),
+        None => panic!("DBServer not set using environmental variables. Unable to proceed. Please set OPENWEATHER_INFLUXDB_SERVER and try again!")
+    };
+    match &running_config.dbname {
+        Some(conf_name) => println!("InfluxDB name added: {}", conf_name),
+        None => panic!("DBServer not set using environmental variables. Unable to proceed. Please set OPENWEATHER_INFLUXDB_NAME and try again!")
+    };
+
+    if running_config.dbpass.is_none() {
+        match &running_config.dbuser {
+            Some(_) => panic!("InfluxDB user set but password is not. PLease add OPENWEATHER_INFLUXDB_DBPASS and try again"),
+            None => println!("InfluxDB authentication not added. If this is a mistake, set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
+        };
+    } else {
+        match &running_config.dbuser {
+            Some(conf_user) => println!("InfluxDB user added: {}", conf_user),
+            None => panic!("InfluxDB user not added but password added. Set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
+        };
+    }
+
+
+    let running_client = Client::new(running_config.get_dbserver(), running_config.get_dbname());
 
     let running_url: String = format!("http://api.openweathermap.org/data/2.5/air_pollution?lat={}&lon={}&appid={}", &running_coords[0], &running_coords[1], running_config.get_key());
     loop {
