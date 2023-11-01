@@ -2,6 +2,9 @@ use ureq;
 use std::{env, thread, time::Duration};
 use std::fmt;
 use serde::Deserialize;
+use influxdb::{Client, Timestamp};
+use influxdb::InfluxDbWriteable;
+use chrono::{DateTime, Utc};
 
 #[derive(Clone, Debug)]
 struct Config {
