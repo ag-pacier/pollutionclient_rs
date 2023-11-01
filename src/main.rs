@@ -6,17 +6,21 @@ use serde::Deserialize;
 struct Config {
     apikey: Option<String>,
     location: Option<ZipLoc>,
+    timing: i32,
 }
 
 impl Config {
     fn new() -> Config {
-        Config { apikey: None, location: None }
+        Config { apikey: None, location: None, timing: 60 }
     }
     fn set_loc(&mut self, new_loc: ZipLoc) -> () {
         self.location = Some(new_loc);
     }
     fn set_key(&mut self, new_key: String) -> () {
         self.apikey = Some(new_key);
+    }
+    fn set_timing(&mut self, new_timing: i32) -> () {
+        self.timing = new_timing;
     }
     fn get_key(&self) -> String {
         match &self.apikey {
@@ -30,6 +34,9 @@ impl Config {
             None => ZipLoc { zip: "0".to_string(), name: "0".to_string(), lat: "0".to_string(), lon: "0".to_string(), country: "0".to_string() },
         };
         [current_location.lat, current_location.lon]
+    }
+    fn get_timing(&self) -> i32 {
+        self.timing
     }
     fn parse_env() -> Result<Config, ureq::Error> {
         let mut current_config: Config = Config::new();
@@ -51,7 +58,13 @@ impl Config {
             };
             let env_location = get_coords_zipcode(zip_code.unwrap(), country, current_config.get_key())?;
             current_config.set_loc(env_location);
-        }
+        };
+        let config_timing: String = match env::var("OPENWEATHER_POLL_TIMING") {
+            Ok(timing) => timing,
+            Err(_) => "60".to_string(),
+
+        };
+        current_config.set_timing(config_timing.parse::<i32>().unwrap_or(60));
         Ok(current_config)
     }
 }
