@@ -65,12 +65,6 @@ struct ZipLoc {
     country: String,
 }
 
-fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<ZipLoc, ureq::Error> {
-    let url: String = format!("http://api.openweathermap.org/geo/1.0/zip?zip={zip},{country}&appid={apikey}");
-    let response: ZipLoc = ureq::get(&url).call()?.into_json()?;
-    Ok(response)
-}
-
 #[derive(Clone, Debug, Deserialize)]
 struct Components {
     co: f32,
@@ -99,6 +93,17 @@ struct PollList {
 struct PollResponse {
     coord: Vec<f32>,
     list: PollList,
+}
+
+fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<ZipLoc, ureq::Error> {
+    let url: String = format!("http://api.openweathermap.org/geo/1.0/zip?zip={zip},{country}&appid={apikey}");
+    let response: ZipLoc = ureq::get(&url).call()?.into_json()?;
+    Ok(response)
+}
+
+fn get_pollution(url: String) -> Result<PollResponse, ureq::Error> {
+    let response: PollResponse = ureq::get(&url).call()?.into_json()?;
+    Ok(response)
 }
 
 fn main() {
