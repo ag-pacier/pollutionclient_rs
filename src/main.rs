@@ -95,10 +95,21 @@ struct Components {
     pm10: f32,
     nh3: f32,
 }
+impl fmt::Display for Components {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Carbon Monoxide: {} μg/m3, Nitrogen Monoxide: {} μg/m3, Nitrogen Dioxide: {} μg/m3, Ozone: {} μg/m3, Sulphur Dioxide: {} μg/m3, Fine Particulate Matter: {} μg/m3, Course Particulate Matter: {} μg/m3, Ammonia: {} μg/m3",
+        self.co, self.no, self.no2, self.o3, self.so2, self.pm2_5, self.pm10, self.nh3)
+    }
+}
 
 #[derive(Clone, Debug, Deserialize)]
 struct MainAqi {
     aqi: i8,
+}
+impl fmt::Display for MainAqi {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Air Quality: {}", self.aqi)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -108,10 +119,22 @@ struct PollList {
     components: Components,
 }
 
+impl fmt::Display for PollList {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "UTC: {}, AQI: {}, Components: {}", self.dt, self.main, self.components)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct PollResponse {
     coord: Vec<f32>,
     list: PollList,
+}
+
+impl fmt::Display for PollResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Coordinates used: {:#?}, List: {}", self.coord, self.list)
+    }
 }
 
 fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<ZipLoc, ureq::Error> {
@@ -153,7 +176,7 @@ fn main() {
         let current_aqi: MainAqi = response.list.main;
         let current_pollution: Components = response.list.components;
         println!("Current AQI: {:#?}", current_aqi);
-        println!("Component breakdown: {:#?}", current_pollution);
+        println!("Component breakdown: {}", current_pollution);
         thread::sleep(Duration::from_secs(running_config.get_timing()));
     }
 }
