@@ -1,12 +1,13 @@
 use ureq;
-use std::env;
+use std::{env, thread, time::Duration};
+use std::fmt;
 use serde::Deserialize;
 
 #[derive(Clone, Debug)]
 struct Config {
     apikey: Option<String>,
     location: Option<ZipLoc>,
-    timing: i32,
+    timing: u64,
 }
 
 impl Config {
@@ -19,7 +20,7 @@ impl Config {
     fn set_key(&mut self, new_key: String) -> () {
         self.apikey = Some(new_key);
     }
-    fn set_timing(&mut self, new_timing: i32) -> () {
+    fn set_timing(&mut self, new_timing: u64) -> () {
         self.timing = new_timing;
     }
     fn get_key(&self) -> String {
@@ -29,13 +30,12 @@ impl Config {
         }
     }
     fn get_coords(&self) -> [String; 2] {
-        let current_location: ZipLoc = match &self.location {
-            Some(loc) => loc.clone(),
-            None => ZipLoc { zip: "0".to_string(), name: "0".to_string(), lat: "0".to_string(), lon: "0".to_string(), country: "0".to_string() },
-        };
-        [current_location.lat, current_location.lon]
+        match &self.location {
+            Some(loc) => [loc.lat.clone(), loc.lon.clone()],
+            None => ["0".to_string(), "0".to_string()],
+        }
     }
-    fn get_timing(&self) -> i32 {
+    fn get_timing(&self) -> u64 {
         self.timing
     }
     fn parse_env() -> Result<Config, ureq::Error> {
@@ -64,7 +64,7 @@ impl Config {
             Err(_) => "60".to_string(),
 
         };
-        current_config.set_timing(config_timing.parse::<i32>().unwrap_or(60));
+        current_config.set_timing(config_timing.parse::<u64>().unwrap_or(60));
         Ok(current_config)
     }
 }
@@ -76,6 +76,12 @@ struct ZipLoc {
     lat: String,
     lon: String,
     country: String,
+}
+
+impl fmt::Display for ZipLoc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Zip-Code: {}, Country: {}, City: {}, Lat: {}, Lon: {}", self.zip, self.country, self.name, self.lat, self.lon)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -114,8 +120,8 @@ fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<Zi
     Ok(response)
 }
 
-fn get_pollution(url: String) -> Result<PollResponse, ureq::Error> {
-    let response: PollResponse = ureq::get(&url).call()?.into_json()?;
+fn get_pollution(url: &str) -> Result<PollResponse, ureq::Error> {
+    let response: PollResponse = ureq::get(url).call()?.into_json()?;
     Ok(response)
 }
 
@@ -127,8 +133,9 @@ fn main() {
     if running_config.apikey.is_none() {
         panic!("API key is not set using environmental variable. Unable to proceed. Please set OPENWEATHER_API_KEY and try again.")
     };
-    if running_config.location.is_none() {
-        panic!("Location is not set using environmental variables. Unable to proceed. Please set OPENWEATHER_POLL_ZIP and if not in the US OPENWEATHER_POLL_COUNTRY and try again.")
+    match &running_config.location {
+        Some(conf_loc) => println!("Location added: {}", conf_loc),
+        None => panic!("Location not set using environmental variables. Unable to proceed. Please set OPENWEATHER_POLL_ZIP and if not in the US, OPENWEATHER_POLL_COUNTRY and try again!")
     };
 
     let running_coords: [String; 2] = running_config.get_coords();
@@ -137,5 +144,16 @@ fn main() {
     };
 
     let running_url: String = format!("http://api.openweathermap.org/data/2.5/air_pollution?lat={}&lon={}&appid={}", &running_coords[0], &running_coords[1], running_config.get_key());
-    
+    loop {
+        let response: PollResponse = match get_pollution(&running_url) {
+            Ok(res) => res,
+            Err(ureq::Error::Status(code, res)) => panic!("Server returned: {} with a response: {:?}", code, res),
+            Err(e) => panic!("Internal error: {}", e),
+        };
+        let current_aqi: MainAqi = response.list.main;
+        let current_pollution: Components = response.list.components;
+        println!("Current AQI: {:#?}", current_aqi);
+        println!("Component breakdown: {:#?}", current_pollution);
+        thread::sleep(Duration::from_secs(running_config.get_timing()));
+    }
 }
