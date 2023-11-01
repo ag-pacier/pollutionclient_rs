@@ -125,13 +125,12 @@ impl fmt::Display for PollList {
 
 #[derive(Clone, Debug, Deserialize)]
 struct PollResponse {
-    coord: Vec<f32>,
     list: Vec<PollList>,
 }
 
 impl fmt::Display for PollResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Coordinates used: {:#?}, List: {:#?}", self.coord, self.list)
+        write!(f, "List: {:#?}", self.list)
     }
 }
 
