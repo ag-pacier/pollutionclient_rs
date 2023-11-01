@@ -1,5 +1,5 @@
 use ureq;
-use std::env;
+use std::{env, fmt::format};
 use serde::Deserialize;
 
 #[derive(Clone, Debug)]
@@ -21,7 +21,7 @@ impl Config {
     fn get_key(&self) -> String {
         match &self.apikey {
             Some(key) => key.to_owned(),
-            None => "None".to_string(),
+            None => "NOAPISET".to_string(),
         }
     }
     fn get_coords(&self) -> [String; 2] {
@@ -50,7 +50,7 @@ impl Config {
                 Err(_) => "US".to_string(),
             };
             let env_location = get_coords_zipcode(zip_code.unwrap(), country, current_config.get_key())?;
-            current_config.location = Some(env_location);
+            current_config.set_loc(env_location);
         }
         Ok(current_config)
     }
@@ -88,7 +88,25 @@ struct MainAqi {
     aqi: i8,
 }
 
+
+
 fn main() {
-    let running_config: Config = Config::parse_env().unwrap();
+    let running_config: Config = match Config::parse_env() {
+        Ok(configuration) => configuration,
+        Err(e) => panic!("Unable to set configuration. Error returned: {e}"),
+    };
+    if running_config.apikey.is_none() {
+        panic!("API key is not set using environmental variable. Unable to proceed. Please set OPENWEATHER_API_KEY and try again.")
+    };
+    if running_config.location.is_none() {
+        panic!("Location is not set using environmental variables. Unable to proceed. Please set OPENWEATHER_POLL_ZIP and if not in the US OPENWEATHER_POLL_COUNTRY and try again.")
+    };
+
+    let running_coords: [String; 2] = running_config.get_coords();
+    if running_coords == ["0".to_string(), "0".to_string()] {
+        panic!("Default coordinates obtained. Likely unable to find correct location. Please double check location vars and try again.")
+    };
+
+    let running_url: String = format!("http://api.openweathermap.org/data/2.5/air_pollution?lat={}&lon={}&appid={}", &running_coords[0], &running_coords[1], running_config.get_key());
     
 }
