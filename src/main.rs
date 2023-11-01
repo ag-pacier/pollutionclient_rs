@@ -31,7 +31,7 @@ impl Config {
     }
     fn get_coords(&self) -> [String; 2] {
         match &self.location {
-            Some(loc) => [loc.lat.clone(), loc.lon.clone()],
+            Some(loc) => [loc.lat.to_string(), loc.lon.to_string()],
             None => ["0".to_string(), "0".to_string()],
         }
     }
@@ -72,8 +72,8 @@ impl Config {
 struct ZipLoc {
     zip: String,
     name: String,
-    lat: String,
-    lon: String,
+    lat: f32,
+    lon: f32,
     country: String,
 }
 
