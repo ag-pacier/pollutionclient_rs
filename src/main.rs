@@ -24,14 +24,21 @@ impl Config {
             None => "None".to_string(),
         }
     }
+    fn get_coords(&self) -> [String; 2] {
+        let current_location: ZipLoc = match &self.location {
+            Some(loc) => loc.clone(),
+            None => ZipLoc { zip: "0".to_string(), name: "0".to_string(), lat: "0".to_string(), lon: "0".to_string(), country: "0".to_string() },
+        };
+        [current_location.lat, current_location.lon]
+    }
     fn parse_env() -> Result<Config, ureq::Error> {
-        let mut currentConfig: Config = Config::new();
+        let mut current_config: Config = Config::new();
         let new_api_key: Option<String> = match env::var("OPENWEATHER_API_KEY") {
             Ok(key) => Some(key),
             Err(_) => None,
         };
         if new_api_key.is_some() {
-            currentConfig.set_key(new_api_key.unwrap());
+            current_config.set_key(new_api_key.unwrap());
         };
         let zip_code: Option<String> = match env::var("OPENWEATHER_POLL_ZIP") {
             Ok(set_zip) => Some(set_zip),
@@ -42,10 +49,10 @@ impl Config {
                 Ok(set_country) => set_country,
                 Err(_) => "US".to_string(),
             };
-            let env_location = get_coords_zipcode(zip_code.unwrap(), country, currentConfig.get_key())?;
-            currentConfig.location = Some(env_location);
+            let env_location = get_coords_zipcode(zip_code.unwrap(), country, current_config.get_key())?;
+            current_config.location = Some(env_location);
         }
-        Ok(currentConfig)
+        Ok(current_config)
     }
 }
 
@@ -65,5 +72,6 @@ fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<Zi
 }
 
 fn main() {
+    let running_config: Config = Config::parse_env().unwrap();
     
 }
