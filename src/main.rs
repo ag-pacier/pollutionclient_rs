@@ -5,6 +5,7 @@ use serde::Deserialize;
 use influxdb::{Client, WriteQuery, Error};
 use influxdb::InfluxDbWriteable;
 use chrono::{DateTime, Utc};
+use pollster::FutureExt as _;
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -40,11 +41,9 @@ impl Config {
         self.dbpass = Some(new_dbpass);
     }
     fn set_dbserver(&mut self, new_dbserver: String) -> () {
-        let mut final_server: String = String::new();
-        if new_dbserver.starts_with("http://") {
-            final_server = new_dbserver.clone();
-        } else {
-            final_server = format!("http://{}", &new_dbserver);
+        let mut final_server: String = format!("{}", &new_dbserver);
+        if !final_server.starts_with("http://") {
+            final_server = format!("http://{}", final_server);
         };
         let colon_check: Vec<&str> = new_dbserver.rsplit(":").collect();
         if colon_check.len() < 3 {
@@ -233,11 +232,32 @@ async fn write_to_db(dbclient: &Client, aqi: i8, pollution: Components) -> Resul
          aqi: aqi, co: pollution.co, no: pollution.no, no2: pollution.no2, o3: pollution.o3, so2: pollution.so2,
          pm2_5: pollution.pm2_5, pm10: pollution.pm10, nh3: pollution.nh3 }.into_query("pollution");
 
-    let internal_client = dbclient.clone();
+    let internal_client: Client = dbclient.clone();
     
-    let result = internal_client.query(dbupdate).await?;
+    let result: String = internal_client.query(dbupdate).await?;
 
     Ok(result)
+}
+
+fn build_client(current_config: &Config) -> Client {
+    let this_config: Config = current_config.clone();
+    if this_config.dbpass.is_none() {
+        match &this_config.dbuser {
+            Some(_) => panic!("InfluxDB user set but password is not. PLease add OPENWEATHER_INFLUXDB_DBPASS and try again"),
+            None => println!("InfluxDB authentication not added. If this is a mistake, set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
+        };
+    } else {
+        match &this_config.dbuser {
+            Some(conf_user) => println!("InfluxDB user added: {}", conf_user),
+            None => panic!("InfluxDB user not added but password added. Set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
+        };
+    }
+
+    if this_config.dbpass.is_some() {
+        Client::new(this_config.get_dbserver(), this_config.get_dbname()).with_auth(&this_config.dbuser.clone().unwrap(), &this_config.dbpass.clone().unwrap())
+    } else {
+        Client::new(this_config.get_dbserver(), this_config.get_dbname())
+    }
 }
 
 fn main() {
@@ -267,20 +287,7 @@ fn main() {
         None => panic!("DBServer not set using environmental variables. Unable to proceed. Please set OPENWEATHER_INFLUXDB_NAME and try again!")
     };
 
-    if running_config.dbpass.is_none() {
-        match &running_config.dbuser {
-            Some(_) => panic!("InfluxDB user set but password is not. PLease add OPENWEATHER_INFLUXDB_DBPASS and try again"),
-            None => println!("InfluxDB authentication not added. If this is a mistake, set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
-        };
-    } else {
-        match &running_config.dbuser {
-            Some(conf_user) => println!("InfluxDB user added: {}", conf_user),
-            None => panic!("InfluxDB user not added but password added. Set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
-        };
-    }
-
-
-    let running_client = Client::new(running_config.get_dbserver(), running_config.get_dbname());
+    let running_client: Client = build_client(&running_config);
 
     let running_url: String = format!("http://api.openweathermap.org/data/2.5/air_pollution?lat={}&lon={}&appid={}", &running_coords[0], &running_coords[1], running_config.get_key());
     loop {
@@ -291,8 +298,18 @@ fn main() {
         };
         let current_aqi: MainAqi = response.list[0].main.clone();
         let current_pollution: Components = response.list[0].components.clone();
-        println!("Current AQI: {:#?}", current_aqi);
+        println!("{}", current_aqi);
         println!("Component breakdown: {}", current_pollution);
+
+        let my_fut = async {write_to_db(&running_client, current_aqi.aqi, current_pollution).await};
+        let result = my_fut.block_on();
+    
+        if result.is_err() {
+            panic!("Failed to write to DB! Error: {}", result.unwrap_err());
+        } else {
+            println!("DB Write passed: {}", result.unwrap());
+        }
+
         thread::sleep(Duration::from_secs(running_config.get_timing()));
     }
 }
