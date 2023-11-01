@@ -113,26 +113,25 @@ impl fmt::Display for MainAqi {
 
 #[derive(Clone, Debug, Deserialize)]
 struct PollList {
-    dt: i32,
-    main: MainAqi,
     components: Components,
+    main: MainAqi,
 }
 
 impl fmt::Display for PollList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "UTC: {}, AQI: {}, Components: {}", self.dt, self.main, self.components)
+        write!(f, "AQI: {}, Components: {}", self.main.aqi, self.components)
     }
 }
 
 #[derive(Clone, Debug, Deserialize)]
 struct PollResponse {
     coord: Vec<f32>,
-    list: PollList,
+    list: Vec<PollList>,
 }
 
 impl fmt::Display for PollResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Coordinates used: {:#?}, List: {}", self.coord, self.list)
+        write!(f, "Coordinates used: {:#?}, List: {:#?}", self.coord, self.list)
     }
 }
 
@@ -172,8 +171,8 @@ fn main() {
             Err(ureq::Error::Status(code, res)) => panic!("Server returned: {} with a response: {:?}", code, res),
             Err(e) => panic!("Internal error: {}", e),
         };
-        let current_aqi: MainAqi = response.list.main;
-        let current_pollution: Components = response.list.components;
+        let current_aqi: MainAqi = response.list[0].main.clone();
+        let current_pollution: Components = response.list[0].components.clone();
         println!("Current AQI: {:#?}", current_aqi);
         println!("Component breakdown: {}", current_pollution);
         thread::sleep(Duration::from_secs(running_config.get_timing()));
