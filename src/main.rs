@@ -294,13 +294,14 @@ async fn main() -> Result<(), Error> {
     loop {
         let response: PollResponse = match get_pollution(&running_url) {
             Ok(res) => res,
-            Err(ureq::Error::Status(code, res)) => panic!("Server returned: {} with a response: {:?}", code, res),
+            Err(ureq::Error::Status(code, res)) => panic!("Server returned: {} with a text: {}", code, res.status_text()),
             Err(e) => panic!("Internal error: {}", e),
         };
         let current_aqi: MainAqi = response.list[0].main.clone();
         let current_pollution: Components = response.list[0].components.clone();
         println!("{}", current_aqi);
-        println!("Component breakdown: {}", current_pollution);
+        println!("Component breakdown:");
+        println!("{}", current_pollution);
 
         let dbresult = write_to_db(&running_client, current_aqi.aqi, current_pollution).await?;
 
