@@ -16,11 +16,12 @@ struct Config {
     dbserver: Option<String>,
     dbuser: Option<String>,
     dbpass: Option<String>,
+    max_retry: u8,
 }
 
 impl Config {
     fn new() -> Config {
-        Config { apikey: None, location: None, timing: 60, dbname: None, dbserver: None, dbuser: None, dbpass: None }
+        Config { apikey: None, location: None, timing: 60, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
     }
     fn set_loc(&mut self, new_loc: ZipLoc) -> () {
         self.location = Some(new_loc);
@@ -51,6 +52,9 @@ impl Config {
         }
         self.dbserver = Some(final_server);
     }
+    fn set_maxretry(&mut self, new_retry: u8) -> () {
+        self.max_retry = new_retry;
+    }
     fn get_key(&self) -> String {
         match &self.apikey {
             Some(key) => key.to_owned(),
@@ -77,6 +81,9 @@ impl Config {
             Some(name) => name.to_owned(),
             None => "test".to_string(),
         }
+    }
+    fn get_maxretry(&self) -> u8 {
+        self.max_retry.clone()
     }
     fn parse_env() -> Result<Config, ureq::Error> {
         let mut current_config: Config = Config::new();
@@ -132,6 +139,11 @@ impl Config {
         if new_dbpass.is_some() {
             current_config.set_dbpass(new_dbpass.unwrap());
         };
+        let new_maxretry: String = match env::var("OPENWEATHER_MAX_RETRY") {
+            Ok(max_retry) => max_retry,
+            Err(_) => "3".to_string(),
+        };
+        current_config.set_maxretry(new_maxretry.parse::<u8>().unwrap_or(3));
         Ok(current_config)
     }
 }
@@ -291,22 +303,35 @@ async fn main() -> Result<(), Error> {
     let running_client: Client = build_client(&running_config);
 
     let running_url: String = format!("http://api.openweathermap.org/data/2.5/air_pollution?lat={}&lon={}&appid={}", &running_coords[0], &running_coords[1], running_config.get_key());
-    loop {
-        let response: PollResponse = match get_pollution(&running_url) {
-            Ok(res) => res,
-            Err(ureq::Error::Status(code, res)) => panic!("Server returned: {} with a text: {}", code, res.status_text()),
-            Err(e) => panic!("Internal error: {}", e),
+
+    let mut error_count: u8 = 0;
+
+    while error_count < running_config.get_maxretry() {
+        let response: Result<PollResponse, ureq::Error> = match get_pollution(&running_url) {
+            Ok(res) => Ok(res),
+            Err(e) => Err(e),
         };
-        let current_aqi: MainAqi = response.list[0].main.clone();
-        let current_pollution: Components = response.list[0].components.clone();
-        println!("{}", current_aqi);
-        println!("Component breakdown:");
-        println!("{}", current_pollution);
 
-        let dbresult = write_to_db(&running_client, current_aqi.aqi, current_pollution).await?;
+        if response.is_ok() {
+            let unpacked = response.unwrap();
+            let current_aqi: MainAqi = unpacked.list[0].main.clone();
+            let current_pollution: Components = unpacked.list[0].components.clone();
+            println!("{}", current_aqi);
+            println!("Component breakdown:");
+            println!("{}", current_pollution);
 
-        println!("Successfully written to DB {} with response {}", running_config.get_dbname(), dbresult);
+            let dbresult = write_to_db(&running_client, current_aqi.aqi, current_pollution).await?;
 
+            println!("Successfully written to DB {} with response {}", running_config.get_dbname(), dbresult);
+        } else {
+            println!("Error encountered while grabbing stats.");
+            error_count = error_count + 1;
+            match response.unwrap_err() {
+                ureq::Error::Status(code, resp) => println!("Status: {}, Text: {}", code, resp.status_text()),
+                ureq::Error::Transport(trans) => println!("Kind: {}, Message: {}", trans.kind(), trans.message().unwrap_or("N/A")),
+            };
+        }
         thread::sleep(Duration::from_secs(running_config.get_timing()));
     }
+    panic!("Max errors reached! Terminating loop and script.");
 }
