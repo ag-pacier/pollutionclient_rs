@@ -5,7 +5,6 @@ use serde::Deserialize;
 use influxdb::{Client, WriteQuery, Error};
 use influxdb::InfluxDbWriteable;
 use chrono::{DateTime, Utc};
-use pollster::FutureExt as _;
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -301,14 +300,7 @@ fn main() {
         println!("{}", current_aqi);
         println!("Component breakdown: {}", current_pollution);
 
-        let my_fut = async {write_to_db(&running_client, current_aqi.aqi, current_pollution).await};
-        let result = my_fut.block_on();
-    
-        if result.is_err() {
-            panic!("Failed to write to DB! Error: {}", result.unwrap_err());
-        } else {
-            println!("DB Write passed: {}", result.unwrap());
-        }
+        
 
         thread::sleep(Duration::from_secs(running_config.get_timing()));
     }
