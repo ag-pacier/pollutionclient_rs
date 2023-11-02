@@ -5,6 +5,7 @@ use serde::Deserialize;
 use influxdb::{Client, WriteQuery, Error};
 use influxdb::InfluxDbWriteable;
 use chrono::{DateTime, Utc};
+use tokio;
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -259,6 +260,7 @@ fn build_client(current_config: &Config) -> Client {
     }
 }
 
+#[tokio::main]
 fn main() {
     let running_config: Config = match Config::parse_env() {
         Ok(configuration) => configuration,
