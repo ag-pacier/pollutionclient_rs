@@ -260,8 +260,8 @@ fn build_client(current_config: &Config) -> Client {
     }
 }
 
-#[tokio::main]
-fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Error> {
     let running_config: Config = match Config::parse_env() {
         Ok(configuration) => configuration,
         Err(e) => panic!("Unable to set configuration. Error returned: {e}"),
@@ -302,7 +302,9 @@ fn main() {
         println!("{}", current_aqi);
         println!("Component breakdown: {}", current_pollution);
 
-        
+        let dbresult = write_to_db(&running_client, current_aqi.aqi, current_pollution).await?;
+
+        println!("Successfully written to DB {} with response {}", running_config.get_dbname(), dbresult);
 
         thread::sleep(Duration::from_secs(running_config.get_timing()));
     }
