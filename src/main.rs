@@ -21,7 +21,7 @@ struct Config {
 
 impl Config {
     fn new() -> Config {
-        Config { apikey: None, location: None, timing: 60, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
+        Config { apikey: None, location: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
     }
     fn set_loc(&mut self, new_loc: ZipLoc) -> () {
         self.location = Some(new_loc);
@@ -46,7 +46,7 @@ impl Config {
         if !final_server.starts_with("http://") {
             final_server = format!("http://{}", final_server);
         };
-        let colon_check: Vec<&str> = new_dbserver.rsplit(":").collect();
+        let colon_check: Vec<&str> = final_server.rsplit(":").collect();
         if colon_check.len() < 3 {
             final_server = format!("{}:8086", final_server);
         }
@@ -64,7 +64,7 @@ impl Config {
     fn get_coords(&self) -> [String; 2] {
         match &self.location {
             Some(loc) => [loc.lat.to_string(), loc.lon.to_string()],
-            None => ["0".to_string(), "0".to_string()],
+            None => ["0.0".to_string(), "0.0".to_string()],
         }
     }
     fn get_timing(&self) -> u64 {
@@ -148,7 +148,7 @@ impl Config {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct ZipLoc {
     zip: String,
     name: String,
@@ -334,4 +334,147 @@ async fn main() -> Result<(), Error> {
         thread::sleep(Duration::from_secs(running_config.get_timing()));
     }
     panic!("Max errors reached! Terminating loop and script.");
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn new_config_defaults() {
+        let test_config: Config = Config::new();
+        assert_eq!(test_config.timing, 3600);
+        assert_eq!(test_config.max_retry, 3);
+    }
+
+    #[test]
+    fn config_set_loc_works() {
+        let mut test_config: Config = Config::new();
+        let new_zipcode: ZipLoc = ZipLoc { zip: "00000".to_string(), name: "test".to_string(), lat: 42.0, lon: 42.0, country: "US".to_string() };
+        test_config.set_loc(new_zipcode.clone());
+        assert_eq!(test_config.location.unwrap(), new_zipcode);
+    }
+
+    #[test]
+    fn config_set_key_works() {
+        let mut test_config: Config = Config::new();
+        let test_key: String = "BigTestString".to_string();
+        test_config.set_key(test_key.clone());
+        assert_eq!(test_config.apikey.unwrap(), test_key);
+    }
+
+    #[test]
+    fn config_set_timing_works() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_timing: u64 = 32;
+        test_config.set_timing(new_timing.clone());
+        assert_eq!(test_config.timing, new_timing);
+        assert_ne!(test_config.timing, control_config.timing);
+    }
+
+    #[test]
+    fn config_set_dbname_works() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbname: String = "testThisdata".to_string();
+        test_config.set_dbname(new_dbname.clone());
+        assert_eq!(test_config.dbname, Some(new_dbname));
+        assert_ne!(test_config.dbname, control_config.dbname);
+    }
+
+    #[test]
+    fn config_set_dbserver_works() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbserver: String = "http://testThisdata:8080".to_string();
+        test_config.set_dbserver(new_dbserver.clone());
+        assert_eq!(test_config.dbserver, Some(new_dbserver));
+        assert_ne!(test_config.dbserver, control_config.dbserver);
+    }
+
+    #[test]
+    fn config_set_dbserver_works_no_http() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbserver: String = "testThisdata:8080".to_string();
+        test_config.set_dbserver(new_dbserver.clone());
+        assert_eq!(test_config.dbserver, Some(format!("http://{}", new_dbserver)));
+        assert_ne!(test_config.dbserver, Some(new_dbserver));
+        assert_ne!(test_config.dbserver, control_config.dbserver);
+    }
+
+    #[test]
+    fn config_set_dbserver_works_no_port() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbserver: String = "http://testThisdata".to_string();
+        test_config.set_dbserver(new_dbserver.clone());
+        assert_eq!(test_config.dbserver, Some(format!("{}:8086", new_dbserver)));
+        assert_ne!(test_config.dbserver, Some(new_dbserver));
+        assert_ne!(test_config.dbserver, control_config.dbserver);
+    }
+
+        #[test]
+    fn config_set_dbserver_works_no_port_or_http() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbserver: String = "testThisdata".to_string();
+        test_config.set_dbserver(new_dbserver.clone());
+        assert_eq!(test_config.dbserver, Some(format!("http://{}:8086", new_dbserver)));
+        assert_ne!(test_config.dbserver, Some(new_dbserver));
+        assert_ne!(test_config.dbserver, control_config.dbserver);
+    }
+
+    #[test]
+    fn config_set_dbuser_works() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbuser: String = "testThisdata".to_string();
+        test_config.set_dbuser(new_dbuser.clone());
+        assert_eq!(test_config.dbuser, Some(new_dbuser));
+        assert_ne!(test_config.dbuser, control_config.dbuser);
+    }
+
+    #[test]
+    fn config_set_dbpass_works() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbpass: String = "testThisdata".to_string();
+        test_config.set_dbpass(new_dbpass.clone());
+        assert_eq!(test_config.dbpass, Some(new_dbpass));
+        assert_ne!(test_config.dbpass, control_config.dbpass);
+    }
+
+    #[test]
+    fn config_set_maxretry_works() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_max_retry: u8 = 55;
+        test_config.set_maxretry(new_max_retry);
+        assert_eq!(test_config.max_retry, new_max_retry);
+        assert_ne!(test_config.max_retry, control_config.max_retry);
+    }
+
+    #[test]
+    fn config_api_none_by_new() {
+        let test_config: Config = Config::new();
+        assert_eq!(test_config.apikey, None);
+    }
+
+    #[test]
+    fn config_api_none_get_key_noapiset() {
+        let test_config: Config = Config::new();
+        assert_eq!(test_config.apikey, None);
+        assert_eq!(test_config.get_key(), "NOAPISET".to_string());
+    }
+
+    #[test]
+    fn config_api_some_get_key() {
+        let mut test_config: Config = Config::new();
+        let new_key: String = "NewTestKey".to_string();
+        test_config.set_key(new_key.clone());
+        assert_eq!(test_config.apikey, Some(new_key));
+    }
+
 }
