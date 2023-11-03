@@ -320,9 +320,9 @@ async fn main() -> Result<(), Error> {
             println!("Component breakdown:");
             println!("{}", current_pollution);
 
-            let dbresult = write_to_db(&running_client, current_aqi.aqi, current_pollution).await?;
+            write_to_db(&running_client, current_aqi.aqi, current_pollution).await?;
 
-            println!("Successfully written to DB {} with response {}", running_config.get_dbname(), dbresult);
+            println!("Successfully written to DB {}", running_config.get_dbname());
         } else {
             println!("Error encountered while grabbing stats.");
             error_count = error_count + 1;
