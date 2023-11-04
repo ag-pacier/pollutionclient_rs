@@ -328,6 +328,7 @@ async fn main() -> Result<(), Error> {
             write_to_db(&running_client, current_aqi.aqi, current_pollution).await?;
 
             println!("Successfully written to DB {}", running_config.get_dbname());
+            thread::sleep(Duration::from_secs(running_config.get_timing()));
         } else {
             println!("Error encountered while grabbing stats.");
             error_count = error_count + 1;
@@ -335,8 +336,8 @@ async fn main() -> Result<(), Error> {
                 ureq::Error::Status(code, resp) => println!("Status: {}, Text: {}", code, resp.status_text()),
                 ureq::Error::Transport(trans) => println!("Kind: {}, Message: {}", trans.kind(), trans.message().unwrap_or("N/A")),
             };
-        }
-        thread::sleep(Duration::from_secs(running_config.get_timing()));
+            thread::sleep(Duration::from_secs(running_config.get_timing() / 2));
+        } 
     }
     panic!("Max errors reached! Terminating loop and script.");
 }
