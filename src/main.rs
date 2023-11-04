@@ -64,7 +64,7 @@ impl Config {
     fn get_coords(&self) -> [String; 2] {
         match &self.location {
             Some(loc) => [loc.lat.to_string(), loc.lon.to_string()],
-            None => ["0.0".to_string(), "0.0".to_string()],
+            None => ["NOTSET".to_string(), "NOTSET".to_string()],
         }
     }
     fn get_timing(&self) -> u64 {
@@ -287,9 +287,14 @@ async fn main() -> Result<(), Error> {
     };
 
     let running_coords: [String; 2] = running_config.get_coords();
-    if running_coords == ["0".to_string(), "0".to_string()] {
-        panic!("Default coordinates obtained. Likely unable to find correct location. Please double check location vars and try again.")
-    };
+    match running_coords[0].parse::<f32>() {
+        Ok(_) => println!("Latitude looks good."),
+        Err(e) => panic!("Latitude looks malformed. {} given but parsing returns: {}", running_coords[0], e),
+    }
+    match running_coords[1].parse::<f32>() {
+        Ok(_) => println!("Longitude looks good."),
+        Err(e) => panic!("Longitude looks malformed. {} given but parsing returns: {}", running_coords[1], e),
+    }
 
     match &running_config.dbserver {
         Some(conf_server) => println!("InfluxDB added: {}", conf_server),
@@ -371,6 +376,13 @@ mod tests {
         test_config.set_timing(new_timing.clone());
         assert_eq!(test_config.timing, new_timing);
         assert_ne!(test_config.timing, control_config.timing);
+    }
+
+    #[test]
+    fn config_get_timing_default() {
+        let test_config: Config = Config::new();
+        let current_default: u64 = 3600;
+        assert_eq!(test_config.get_timing(), current_default);
     }
 
     #[test]
@@ -475,6 +487,48 @@ mod tests {
         let new_key: String = "NewTestKey".to_string();
         test_config.set_key(new_key.clone());
         assert_eq!(test_config.apikey, Some(new_key));
+    }
+
+    #[test]
+    fn config_get_coords_none() {
+        let test_config: Config = Config::new();
+        let test_coords: [String; 2] = test_config.get_coords();
+        assert_eq!(test_coords, ["NOTSET".to_string(), "NOTSET".to_string()])
+    }
+
+    #[test]
+    #[should_panic]
+    fn config_get_coords_none_parsing() {
+        let test_config: Config = Config::new();
+        let test_coords: [String; 2] = test_config.get_coords();
+        let _parse_check: f32 = test_coords[0].parse().unwrap();
+    }
+
+    #[test]
+    fn config_get_coords_some() {
+        let control_config: Config = Config::new();
+        let control_coords: [String; 2] = control_config.get_coords();
+        let accurate_coords: [f32; 2] = [42.5, 42.5];
+        let test_zip: ZipLoc = ZipLoc { zip: "99999".to_string(), name: "TestLoc".to_string(), lat: accurate_coords[0], lon: accurate_coords[1], country: "US".to_string() };
+        let test_config: Config = Config { apikey: None, location: Some(test_zip), timing: 5, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 };
+        let test_coords: [String; 2] = test_config.get_coords();
+        let parsed_test_coords: [f32; 2] = [test_coords[0].parse().unwrap(), test_coords[1].parse().unwrap()];
+        assert_eq!(accurate_coords, parsed_test_coords);
+        assert_ne!(control_coords, test_coords);
+    }
+
+    #[test]
+    fn config_get_dbserver_default() {
+        let test_config: Config = Config::new();
+        let dbdefault: String = test_config.get_dbserver();
+        assert_eq!(dbdefault, "http://localhost:8086".to_string());
+    }
+
+    #[test]
+    fn config_get_dbname_default() {
+        let test_config: Config = Config::new();
+        let dbdefault: String = test_config.get_dbname();
+        assert_eq!(dbdefault, "test".to_string());
     }
 
 }
