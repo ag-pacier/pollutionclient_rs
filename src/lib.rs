@@ -1,3 +1,44 @@
+//! # PollutionClient_RS
+//! 
+//! pollutionclient_rs is a collection of structs and functions that support grabbing air quality and pollution levels from OpenWeatherMaps API. This crate is built with the assumption that it will be running in a container not as root.<br>
+//! As such, it uses environmental variables to collected the need information.<br>
+//! 
+//! # Required Environmental Variables
+//! - OPENWEATHER_API_KEY
+//!     - The API key generated for your account by OpenWeatherMaps
+//! - OPENWEATHER_POLL_ZIP
+//!     - The zipcode where the statistics are desired
+//! - OPENWEATHER_INFLUXDB_NAME
+//!     - The name of the database to write to. Defaults to "test" if not provided.
+//! - OPENWEATHER_INFLUXDB_SERVER
+//!     - The host that will be taking writes of the data. Is expecting "http://" at the start and will add it if it does not see it. If no port is provided, it will add the default "8086"
+//! 
+//! # InfluxDB Server Name Examples
+//! 
+//! Valid
+//! - localhost
+//! - http://localhost
+//! - http://localhost:8080
+//! - localhost:8086
+//! <br><br>
+//! 
+//! Invalid
+//! - tcp://localhost:8080
+//! - https://localhost:443
+//! 
+//! 
+//! # Optional Environmental Variables
+//! - OPENWEATHER_POLL_TIMING
+//!     - The frequency in seconds to check for pollution (Note, OpenWeatherMaps updates pollution stats hourly and thus the default is 3600)
+//! - OPENWEATHER_MAX_RETRY
+//!     - The maximum failed collections to tolerate. Default is 3. This only handles API errors, not panics from the program.
+//! - OPENWEATHER_POLL_COUNTRY
+//!     - If your zipcode is not within the US. You will need to specify your country in a way that OpenWeatherMaps recognizes via their <a href="https://openweathermap.org/api/geocoding-api">API documentation</a>.
+//! - OPENWEATHER_INFLUXDB_DBUSER
+//!     - The username with write permissions to the outlined database ***must be declared with OPENWEATHER_INFLUXDB_DBPASS***
+//! - OPENWEATHER_INFLUXDB_DBPASS
+//!     - The password for the provided username to the outlined database ***must be declared with OPENWEATHER_INFLUXDB_DBUSER***
+
 use ureq;
 use std::env;
 use std::fmt;
@@ -6,7 +47,8 @@ use influxdb::{Client, WriteQuery, Error};
 use influxdb::InfluxDbWriteable;
 use chrono::{DateTime, Utc};
 
-
+/// Primary holder of relevant information for the processing of this crate.
+/// All information is hidden and used via helper functions
 #[derive(Clone, Debug)]
 pub struct Config {
     apikey: Option<String>,
@@ -55,45 +97,56 @@ impl Config {
     fn set_maxretry(&mut self, new_retry: u8) -> () {
         self.max_retry = new_retry;
     }
+    /// Get a copy of the API key associated with a given Config. Will return "NOAPISET" if blank.
     pub fn get_key(&self) -> String {
         match &self.apikey {
             Some(key) => key.to_owned(),
             None => "NOAPISET".to_string(),
         }
     }
+    /// Get the needed coordinates for API request from a given Config. Will return "NOTSET" for both if not set yet.
     pub fn get_coords(&self) -> [String; 2] {
         match &self.location {
             Some(loc) => [loc.lat.to_string(), loc.lon.to_string()],
             None => ["NOTSET".to_string(), "NOTSET".to_string()],
         }
     }
+    /// Get the whole set location of a given Config to confirm it. Will utilize ZipLoc's Display
     pub fn get_location(&self) -> String {
         self.location.clone().unwrap().to_string()
     }
+    /// Get a copy of a given Config's set timing
     pub fn get_timing(&self) -> u64 {
         self.timing
     }
+    /// Get the DB server string. Will return "http://localhost:8086" if not currently set.
     pub fn get_dbserver(&self) -> String {
         match &self.dbserver {
             Some(server) => server.to_owned(),
             None => "http://localhost:8086".to_string(),
         }
     }
+    /// Get the DB name string. Will return "test" if not set.
     pub fn get_dbname(&self) -> String {
         match &self.dbname {
             Some(name) => name.to_owned(),
             None => "test".to_string(),
         }
     }
+    /// Get the maximum allowed retries from a given Config
     pub fn get_maxretry(&self) -> u8 {
         self.max_retry.clone()
     }
+    /// Confirm if the location on a given Config has been set
     pub fn location_is_set(&self) -> bool {
         match self.location {
             Some(_) => true,
             None => false,
         }
     }
+    /// Utilize environmental variables to set the configuration<br>
+    /// # Errors
+    /// Due to using the OpenWeatherMaps API to set the location correctly, this will pass ureq errors
     pub fn parse_env() -> Result<Config, ureq::Error> {
         let mut current_config: Config = Config::new();
         let new_api_key: Option<String> = match env::var("OPENWEATHER_API_KEY") {
@@ -157,6 +210,7 @@ impl Config {
     }
 }
 
+/// This is the format used by OpenWeatherMaps GeoLocating API to set a location
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct ZipLoc {
     zip: String,
@@ -172,6 +226,7 @@ impl fmt::Display for ZipLoc {
     }
 }
 
+/// This is the format used by OpenWeatherMaps to pass pollution amounts
 #[derive(Clone, Debug, Deserialize)]
 pub struct Components {
     co: f32,
@@ -190,6 +245,7 @@ impl fmt::Display for Components {
     }
 }
 
+/// OpenWeatherMaps uses this format to pass the Air Quality Index
 #[derive(Clone, Debug, Deserialize)]
 pub struct MainAqi {
     aqi: i8,
@@ -200,6 +256,8 @@ impl fmt::Display for MainAqi {
     }
 }
 
+/// OpenWeatherMaps uses this format to provide the pollution response. <br>
+/// The response is an array but typically only has one. This structure ensures we can successfully deserialize it.
 #[derive(Clone, Debug, Deserialize)]
 struct PollList {
     components: Components,
@@ -212,6 +270,8 @@ impl fmt::Display for PollList {
     }
 }
 
+/// OpenWeatherMaps highest level includes the PollList objects in a list. <br>
+/// There is also a timestamp but it is discarded.
 #[derive(Clone, Debug, Deserialize)]
 pub struct PollResponse {
     list: Vec<PollList>,
@@ -237,6 +297,8 @@ impl PollResponse {
     }
 }
 
+/// This is the structure of the write to the InfluxDB <br>
+/// It includes the time of the collection and all the stats collected in a flat object
 #[derive(InfluxDbWriteable)]
 pub struct PollUpdate {
     time: DateTime<Utc>,
@@ -251,17 +313,30 @@ pub struct PollUpdate {
     nh3: f32,
 }
 
+/// Using the provided zipcode, country and API key, generates the location accurate to openweathermaps API
+/// 
+/// # Errors
+/// This function passes any errors generated by the underlying ureq crate
 fn get_coords_zipcode(zip: String, country: String, apikey: String) -> Result<ZipLoc, ureq::Error> {
     let url: String = format!("http://api.openweathermap.org/geo/1.0/zip?zip={zip},{country}&appid={apikey}");
     let response: ZipLoc = ureq::get(&url).call()?.into_json()?;
     Ok(response)
 }
 
+/// Uses the provided URL to attempt to get current pollution statistics
+/// 
+/// # Errors
+/// This function passes any errors generated by the underlying ureq crate
 pub fn get_pollution(url: &str) -> Result<PollResponse, ureq::Error> {
     let response: PollResponse = ureq::get(url).call()?.into_json()?;
     Ok(response)
 }
 
+/// async write to database provided by the client generated beforehand
+/// Will return a string of "response" if all went well
+/// 
+/// # Errors
+/// This function passes any errors generated by the underlying influxdb crate
 pub async fn write_to_db(dbclient: &Client, pollution: PollUpdate) -> Result<String, Error> {
     let dbupdate: WriteQuery = pollution.into_query("pollution");
 
@@ -272,6 +347,10 @@ pub async fn write_to_db(dbclient: &Client, pollution: PollUpdate) -> Result<Str
     Ok(result)
 }
 
+/// Creates an influxdb client from information stored in referenced Config
+/// 
+/// # Panics
+/// In situations where only user or only password is set, this function panics to prevent a bad Client being generated
 pub fn build_client(current_config: &Config) -> Client {
     let this_config: Config = current_config.clone();
     if this_config.dbpass.is_none() {
