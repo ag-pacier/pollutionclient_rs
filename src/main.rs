@@ -10,12 +10,12 @@ async fn main() -> Result<(), Error> {
         Err(e) => panic!("Unable to set configuration. Error returned: {e}"),
     };
     if running_config.get_key() == "NOAPISET".to_string() {
-        panic!("API key is not set using environmental variable. Unable to proceed. Please set OPENWEATHER_API_KEY and try again.")
+        panic!("API key is not set. Unable to proceed.")
     };
     if running_config.location_is_set() {
         println!("Location added: {}", running_config.get_location())
     } else {
-        panic!("Location not set using environmental variables. Unable to proceed. Please set OPENWEATHER_POLL_ZIP and if not in the US, OPENWEATHER_POLL_COUNTRY and try again!")
+        panic!("Location not set. Unable to proceed.")
     };
 
     let running_coords: [String; 2] = running_config.get_coords();
