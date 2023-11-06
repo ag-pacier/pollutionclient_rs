@@ -284,6 +284,9 @@ impl fmt::Display for PollResponse {
 }
 
 impl PollResponse {
+    /// Consumes a PollResponse to ready it for writing to a database<br>
+    /// This will print out the current Air Quality Index and the pollution by item for review as it does it<br>
+    /// Note: This function assumes a response with only 1 pollution check. If multiple locations were somehow returned in a single response, all but the first will be discarded
     pub fn unpack(self) -> PollUpdate {
         let current_aqi: MainAqi = self.list[0].main.clone();
         let current_pollution: Components = self.list[0].components.clone();
