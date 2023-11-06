@@ -276,13 +276,13 @@ pub fn build_client(current_config: &Config) -> Client {
     let this_config: Config = current_config.clone();
     if this_config.dbpass.is_none() {
         match &this_config.dbuser {
-            Some(_) => panic!("InfluxDB user set but password is not. Please add OPENWEATHER_INFLUXDB_DBPASS and try again"),
-            None => println!("InfluxDB authentication not added. If this is a mistake, set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
+            Some(_) => panic!("InfluxDB user set but password is not."),
+            None => println!("InfluxDB authentication not added due to blank USER/PASS configuration.")
         };
     } else {
         match &this_config.dbuser {
             Some(conf_user) => println!("InfluxDB user added: {}", conf_user),
-            None => panic!("InfluxDB user not added but password added. Set OPENWEATHER_INFLUXDB_DBUSER and OPENWEATHER_INFLUXDB_DBPASS and try again")
+            None => panic!("InfluxDB password added but not user! Unable to proceed.")
         };
     }
 
