@@ -246,6 +246,8 @@ impl Config {
     /// Unpack and consume ConfigFile to make a Config
     /// # Errors
     /// Due to using the OpenWeatherMaps API to set the location correctly, this will pass ureq errors
+    /// # Panics
+    /// This will panic if the configuration file cannot be found, cannot be read or cannot be parsed
     pub fn unpack_config_file(configuration_path: &str) -> Config {
         let content = std::fs::read_to_string(configuration_path).unwrap();
         let configuration: ConfigFile = match toml::from_str(&content) {
