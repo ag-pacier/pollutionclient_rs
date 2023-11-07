@@ -40,12 +40,41 @@
 //!     - The password for the provided username to the outlined database ***must be declared with OPENWEATHER_INFLUXDB_DBUSER***
 
 use ureq;
-use std::env;
-use std::fmt;
+use std::{env, fmt};
 use serde::Deserialize;
 use influxdb::{Client, WriteQuery, Error};
 use influxdb::InfluxDbWriteable;
 use chrono::{DateTime, Utc};
+use toml;
+
+/// Structure used to parse toml configuration file
+#[derive(Clone, Debug, Deserialize)]
+pub struct ConfigFile {
+    #[serde(rename = "OPENWEATHER_API_KEY")]
+    apikey: Option<String>,
+    #[serde(rename = "OPENWEATHER_POLL_ZIP")]
+    zipcode: Option<String>,
+    #[serde(rename = "OPENWEATHER_POLL_COUNTRY", default = "default_country")]
+    country: Option<String>,
+    #[serde(rename = "OPENWEATHER_POLL_TIMING", default = "default_timing")]
+    timing: u64,
+    #[serde(rename = "OPENWEATHER_INFLUXDB_NAME")]
+    dbname: Option<String>,
+    #[serde(rename = "OPENWEATHER_INFLUXDB_SERVER")]
+    dbserver: Option<String>,
+    #[serde(rename = "OPENWEATHER_INFLUXDB_DBUSER")]
+    dbuser: Option<String>,
+    #[serde(rename = "OPENWEATHER_INFLUXDB_DBPASS")]
+    dbpass: Option<String>,
+    #[serde(rename = "OPENWEATHER_MAX_RETRY", default = "default_retries")]
+    max_retry: u8,
+}
+
+impl Default for ConfigFile {
+    fn default() -> Self {
+        ConfigFile { apikey: None, zipcode: None, country: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
+    }
+}
 
 /// Primary holder of relevant information for the processing of this crate.
 /// All information is hidden and used via helper functions
@@ -61,9 +90,15 @@ pub struct Config {
     max_retry: u8,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Config { apikey: None, location: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
+    }
+}
+
 impl Config {
     fn new() -> Config {
-        Config { apikey: None, location: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
+        Config::default()
     }
     fn set_loc(&mut self, new_loc: ZipLoc) -> () {
         self.location = Some(new_loc);
@@ -144,7 +179,7 @@ impl Config {
             None => false,
         }
     }
-    /// Utilize environmental variables to set the configuration<br>
+    /// Utilize environmental variables to set the configuration
     /// # Errors
     /// Due to using the OpenWeatherMaps API to set the location correctly, this will pass ureq errors
     pub fn parse_env() -> Result<Config, ureq::Error> {
@@ -207,6 +242,47 @@ impl Config {
         };
         current_config.set_maxretry(new_maxretry.parse::<u8>().unwrap_or(3));
         Ok(current_config)
+    }
+    /// Unpack and consume ConfigFile to make a Config
+    /// # Errors
+    /// Due to using the OpenWeatherMaps API to set the location correctly, this will pass ureq errors
+    pub fn unpack_config_file(configuration_path: &str) -> Config {
+        let content = std::fs::read_to_string(configuration_path).unwrap();
+        let configuration: ConfigFile = match toml::from_str(&content) {
+            Ok(contents) => contents,
+            Err(toml_error) => panic!("Error processing configuration file. Message: {}", toml_error.message()),
+        };
+        let mut unpacked_config: Config = Config::new();
+        if configuration.apikey.is_some() {
+            unpacked_config.apikey = configuration.apikey
+        };
+        if configuration.dbname.is_some() {
+            unpacked_config.dbname = configuration.dbname
+        };
+        if configuration.dbserver.is_some() {
+            unpacked_config.dbserver = configuration.dbserver
+        };
+        if configuration.dbuser.is_some() {
+            unpacked_config.dbuser = configuration.dbuser
+        };
+        if configuration.dbpass.is_some() {
+            unpacked_config.dbpass = configuration.dbpass
+        };
+        unpacked_config.timing = configuration.timing;
+        unpacked_config.max_retry = configuration.max_retry;
+        
+        if configuration.zipcode.is_some() {
+            let new_loc: ZipLoc  = match get_coords_zipcode(configuration.zipcode.unwrap(), configuration.country.unwrap(), unpacked_config.get_key()) {
+                Ok(zip) => zip,
+                Err(e) => panic!("Error getting location based on information in config file. Error returned: {}", e.to_string()),
+            };
+            unpacked_config.location = Some(new_loc);
+
+        } else {
+            unpacked_config.location = None;
+        };
+
+        unpacked_config
     }
 }
 
@@ -375,6 +451,20 @@ pub fn build_client(current_config: &Config) -> Client {
     }
 }
 
+/// Return default retries to ensure serde sets the correct value
+fn default_retries() -> u8 {
+    3
+}
+
+/// Return default timing to ensure serde sets the correct value
+fn default_timing() -> u64 {
+    3600
+}
+
+/// Return default country to ensure serde sets the correct value (sorry non-US folks)
+fn default_country() -> Option<String> {
+    Some("US".to_string())
+}
 
 #[cfg(test)]
 mod tests {
