@@ -6,6 +6,7 @@ use tokio;
 // Utilizing tokio as "current_thread" to ensure async function is taken care of. It's okay that it's actually blocking.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
+    // Check to see if FILE_POLL_CONFIG is set, which means there is a config file to be had instead of environmental variables
     let running_config: Config = match env::var("FILE_POLL_CONFIG") {
         Ok(config_file) => Config::unpack_config_file(&config_file),
         Err(_) => Config::parse_env().unwrap(),
