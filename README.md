@@ -10,12 +10,23 @@ Once signed up, generate an API key and give the system roughly 4 hours to allow
 
 Create an InfluxDB database with an appropriate name. Create a user for that DB that has write permissions (read permissions are not required).
 
+# Recommended Setup
+Pull the latest image from Docker. dietolead/pollutionclient_rs:latest
+Put all your needed options in a text/toml file in a secure location on the host running the container.
+
+When running the container, map the a volume to '/usr/src/pollutionclient_rs/config/<yourconfigfile>' and set the environmental variable "FILE_POLL_CONFIG" to that location.
+
+Example (This command is assuming you have a directory named "config" that contains the my_config.toml file needed by the program):
+```
+docker run -d --restart:unless-stopped --env FILE_POLL_CONFIG='/usr/src/pollutionclient_rs/config/my_config.toml' -v ${PWD}/config:/usr/src/pollutionclient_rs/config
+```
+
 # Configuration options
 The recommended option is to create a TOML file with your configuration options and protect it. The keys for the TOML file are the same as the environmental variable names.
 
 Alternatively, you can generate environmental variables for each needed configuration.
 
-## Required Environmental Variables
+## Required Environmental Variables (if not using a config file)
 - OPENWEATHER_API_KEY
   - The API key generated for your account by OpenWeatherMaps
 - OPENWEATHER_POLL_ZIP
