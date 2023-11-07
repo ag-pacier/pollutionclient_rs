@@ -1,14 +1,14 @@
 use pollutionclient_rs::*;
-use std::{thread, time::Duration};
+use std::{thread, time::Duration, env};
 use influxdb::{Client, Error};
 use tokio;
 
 // Utilizing tokio as "current_thread" to ensure async function is taken care of. It's okay that it's actually blocking.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
-    let running_config: Config = match Config::parse_env() {
-        Ok(configuration) => configuration,
-        Err(e) => panic!("Unable to set configuration. Error returned: {e}"),
+    let running_config: Config = match env::var("FILE_POLL_CONFIG") {
+        Ok(config_file) => Config::unpack_config_file(&config_file),
+        Err(_) => Config::parse_env().unwrap(),
     };
     if running_config.get_key() == "NOAPISET".to_string() {
         panic!("API key is not set. Unable to proceed.")
