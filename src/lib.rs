@@ -657,4 +657,11 @@ mod tests {
         assert_eq!(dbdefault, "test".to_string());
     }
 
+    #[test]
+    #[should_panic]
+    fn config_file_not_found() {
+        let new_config: Config = Config::unpack_config_file("BigFakeLocation");
+        assert_eq!(new_config.get_key(), "NOAPISET".to_string());
+    }
+
 }
