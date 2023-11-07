@@ -11,17 +11,15 @@ Once signed up, generate an API key and give the system roughly 4 hours to allow
 Create an InfluxDB database with an appropriate name. Create a user for that DB that has write permissions (read permissions are not required).
 
 # Recommended Setup
-Pull the latest image from Docker: 
-```
-docker pull dietolead/pollutionclient_rs:latest
-```
+Clone the repository and build the image as you see fit using the included Dockerfile.
+
 Put all your needed options in a text/toml file in a secure location on the host running the container.
 
 When running the container, map the a volume to '/usr/src/pollutionclient_rs/config/<yourconfigfile>' and set the environmental variable "FILE_POLL_CONFIG" to that location.
 
-Example (This command is assuming you have a directory named "config" that contains the my_config.toml file needed by the program):
+Example (This command is assuming you have a directory named "config" that contains the my_config.toml file needed by the program. Also that you named the image "pollutionclient_rs:latest"):
 ```
-docker run -d --restart:unless-stopped --env FILE_POLL_CONFIG='/usr/src/pollutionclient_rs/config/my_config.toml' -v ${PWD}/config:/usr/src/pollutionclient_rs/config
+docker run -d --restart:unless-stopped --env FILE_POLL_CONFIG='/usr/src/pollutionclient_rs/config/my_config.toml' -v ${PWD}/config:/usr/src/pollutionclient_rs/config pollutionclient_rs:latest
 ```
 
 # Configuration options
