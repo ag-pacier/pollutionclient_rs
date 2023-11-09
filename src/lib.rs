@@ -20,11 +20,12 @@
 //! - http://localhost
 //! - http://localhost:8080
 //! - localhost:8086
+//!
 //! <br><br>
 //! 
 //! Invalid
 //! - tcp://localhost:8080
-//! - https://localhost:443
+//!
 //! 
 //! 
 //! # Optional Environmental Variables
@@ -120,9 +121,13 @@ impl Config {
     }
     fn set_dbserver(&mut self, new_dbserver: String) -> () {
         let mut final_server: String = format!("{}", &new_dbserver);
-        if !final_server.starts_with("http://") {
+        if final_server.starts_with("http://") {
+            // nothing needs doing
+        } else if final_server.starts_with("https://") {
+            // nothing needs doing
+        } else {
             final_server = format!("http://{}", final_server);
-        };
+        }
         let colon_check: Vec<&str> = final_server.rsplit(":").collect();
         if colon_check.len() < 3 {
             final_server = format!("{}:8086", final_server);
@@ -539,6 +544,16 @@ mod tests {
         test_config.set_dbserver(new_dbserver.clone());
         assert_eq!(test_config.dbserver, Some(format!("http://{}", new_dbserver)));
         assert_ne!(test_config.dbserver, Some(new_dbserver));
+        assert_ne!(test_config.dbserver, control_config.dbserver);
+    }
+
+    #[test]
+    fn config_set_dbserver_works_https() {
+        let mut test_config: Config = Config::new();
+        let control_config: Config = Config::new();
+        let new_dbserver: String = "https://testThisdata:8080".to_string();
+        test_config.set_dbserver(new_dbserver.clone());
+        assert_eq!(test_config.dbserver, Some(new_dbserver));
         assert_ne!(test_config.dbserver, control_config.dbserver);
     }
 
