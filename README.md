@@ -43,11 +43,11 @@ Valid
 - localhost
 - http://localhost
 - http://localhost:8080
+- https://localhost.example.com
 - localhost:8086
 
 Invalid
 - tcp://localhost:8080
-- https://localhost:443
  
 ## Optional Environmental Variables
 - OPENWEATHER_POLL_TIMING
