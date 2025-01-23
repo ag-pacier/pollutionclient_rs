@@ -51,7 +51,7 @@ async fn main() -> Result<(), Error> {
             let unpacked: PollResponse = response.unwrap();
             let results: PollUpdate = unpacked.unpack();
 
-            write_to_db(&running_client, results).await?;
+            write_to_db(&running_client, results, &running_config.get_location()).await?;
 
             println!("Successfully written to DB {}", running_config.get_dbname());
             // Reset error count if we've had a success

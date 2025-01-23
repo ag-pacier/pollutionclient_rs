@@ -39,6 +39,8 @@
 //!     - The username with write permissions to the outlined database ***must be declared with OPENWEATHER_INFLUXDB_DBPASS***
 //! - OPENWEATHER_INFLUXDB_DBPASS
 //!     - The password for the provided username to the outlined database ***must be declared with OPENWEATHER_INFLUXDB_DBUSER***
+//! - OPENWEATHER_INFLUXDB_TOKEN
+//!     - The token to use to connect to InfluxDB v2 or cloud
 
 use ureq;
 use std::{env, fmt};
@@ -69,11 +71,13 @@ pub struct ConfigFile {
     dbpass: Option<String>,
     #[serde(rename = "OPENWEATHER_MAX_RETRY", default = "default_retries")]
     max_retry: u8,
+    #[serde(rename = "OPENWEATHER_INFLUXDB_TOKEN")]
+    token: Option<String>,
 }
 
 impl Default for ConfigFile {
     fn default() -> Self {
-        ConfigFile { apikey: None, zipcode: None, country: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
+        ConfigFile { apikey: None, zipcode: None, country: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3, token: None }
     }
 }
 
@@ -89,11 +93,12 @@ pub struct Config {
     dbuser: Option<String>,
     dbpass: Option<String>,
     max_retry: u8,
+    token: None,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { apikey: None, location: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3 }
+        Config { apikey: None, location: None, timing: 3600, dbname: None, dbserver: None, dbuser: None, dbpass: None, max_retry: 3, token: None }
     }
 }
 
@@ -137,6 +142,9 @@ impl Config {
     fn set_maxretry(&mut self, new_retry: u8) -> () {
         self.max_retry = new_retry;
     }
+    fn set_token(&mut self, new_token: String) -> () {
+        self.token = new_token;
+    }
     /// Get a copy of the API key associated with a given Config. Will return "NOAPISET" if blank.
     pub fn get_key(&self) -> String {
         match &self.apikey {
@@ -151,9 +159,9 @@ impl Config {
             None => ["NOTSET".to_string(), "NOTSET".to_string()],
         }
     }
-    /// Get the whole set location of a given Config to confirm it. Will utilize ZipLoc's Display
-    pub fn get_location(&self) -> String {
-        self.location.clone().unwrap().to_string()
+    /// Get the location of a given Config to confirm it.
+    pub fn get_location(&self) -> &str {
+        self.location.clone().unwrap().get_name()
     }
     /// Get a copy of a given Config's set timing
     pub fn get_timing(&self) -> u64 {
@@ -246,6 +254,13 @@ impl Config {
             Err(_) => "3".to_string(),
         };
         current_config.set_maxretry(new_maxretry.parse::<u8>().unwrap_or(3));
+        let new_token: Option<String> = match env::var("OPENWEATHER_INFLUXDB_TOKEN") {
+            Ok(toke) => Some(toke),
+            Err(_) => None,
+        };
+        if new_token.is_some() {
+            current_config.set_token(new_token.unwrap());
+        };
         Ok(current_config)
     }
     /// Unpack and consume ConfigFile to make a Config
@@ -277,6 +292,9 @@ impl Config {
         };
         unpacked_config.timing = configuration.timing;
         unpacked_config.max_retry = configuration.max_retry;
+        if configuration.token.is_some() {
+            unpacked_config.token = configuration.token
+        };
         
         if configuration.zipcode.is_some() {
             let new_loc: ZipLoc  = match get_coords_zipcode(configuration.zipcode.unwrap(), configuration.country.unwrap(), unpacked_config.get_key()) {
@@ -301,6 +319,12 @@ struct ZipLoc {
     lat: f32,
     lon: f32,
     country: String,
+}
+
+impl ZipLoc {
+    pub fn get_name(&self) -> &str {
+        self.name
+    }
 }
 
 impl fmt::Display for ZipLoc {
@@ -376,9 +400,9 @@ impl PollResponse {
         println!("{}", current_aqi);
         println!("Component breakdown:");
         println!("{}", current_pollution);
-        PollUpdate { time: Utc::now(),
-            aqi: current_aqi.aqi, co: current_pollution.co, no: current_pollution.no, no2: current_pollution.no2, o3: current_pollution.o3, so2: current_pollution.so2,
-            pm2_5: current_pollution.pm2_5, pm10: current_pollution.pm10, nh3: current_pollution.nh3 }
+        PollUpdate { time: Utc::now(), location: "pending",
+            aqi: current_aqi.aqi, co: current_pollution.co, no: current_pollution.no, no2: current_pollution.no2, 
+            o3: current_pollution.o3, so2: current_pollution.so2, pm2_5: current_pollution.pm2_5, pm10: current_pollution.pm10, nh3: current_pollution.nh3 }
 
     }
 }
@@ -388,7 +412,9 @@ impl PollResponse {
 #[derive(InfluxDbWriteable)]
 pub struct PollUpdate {
     time: DateTime<Utc>,
-    #[influxdb(tag)] aqi: i8,
+    #[influxdb(tag)]
+    location: &str,
+    aqi: i8,
     co: f32,
     no: f32,
     no2: f32,
@@ -423,8 +449,13 @@ pub fn get_pollution(url: &str) -> Result<PollResponse, ureq::Error> {
 /// 
 /// # Errors
 /// This function passes any errors generated by the underlying influxdb crate
-pub async fn write_to_db(dbclient: &Client, pollution: PollUpdate) -> Result<String, Error> {
-    let dbupdate: WriteQuery = pollution.into_query("pollution");
+pub async fn write_to_db(dbclient: &Client, pollution: PollUpdate, location: &str) -> Result<String, Error> {
+
+    let mut internal_poll: PollUpdate = pollution.clone();
+
+    internal_poll.location = location;
+
+    let dbupdate: WriteQuery = internal_poll.into_query("pollution");
 
     let internal_client: Client = dbclient.clone();
     
@@ -442,7 +473,7 @@ pub fn build_client(current_config: &Config) -> Client {
     if this_config.dbpass.is_none() {
         match &this_config.dbuser {
             Some(_) => panic!("InfluxDB user set but password is not."),
-            None => println!("InfluxDB authentication not added due to blank USER/PASS configuration.")
+            None => println!("InfluxDBv1 authentication not added due to blank USER/PASS configuration.")
         };
     } else {
         match &this_config.dbuser {
@@ -453,6 +484,8 @@ pub fn build_client(current_config: &Config) -> Client {
 
     if this_config.dbpass.is_some() {
         Client::new(this_config.get_dbserver(), this_config.get_dbname()).with_auth(&this_config.dbuser.clone().unwrap(), &this_config.dbpass.clone().unwrap())
+    } else if this_config.token.is_some() {
+        Client::new(this_config.get_dbserver(), this_config.get_dbname()).with_token(&this_config.token.clone().unwrap())
     } else {
         Client::new(this_config.get_dbserver(), this_config.get_dbname())
     }

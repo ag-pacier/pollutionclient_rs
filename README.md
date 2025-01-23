@@ -2,13 +2,13 @@
 OpenWeatherMaps pollution API Rust Client
 
 # Description
-This is a self contained crate designed to run within a container (non-root). When configured appropriately, via a TOML configuration file or environmental variables, it will regularly pull air quality and pollutant information from OpenWeatherMaps pollution API and write it to an InfluxDB that you designate. Currently, only non-cloud InfluxDBs are supported.
+This is a self contained crate designed to run within a container (non-root). When configured appropriately, via a TOML configuration file or environmental variables, it will regularly pull air quality and pollutant information from OpenWeatherMaps pollution API and write it to an InfluxDB that you designate.
 
 # Before you begin
 If you don't already have one, create an account with OpenWeatherMaps at https://home.openweathermap.org/users/sign_up <br>
 Once signed up, generate an API key and give the system roughly 4 hours to allow your key access.
 
-Create an InfluxDB database with an appropriate name. Create a user for that DB that has write permissions (read permissions are not required).
+Create an InfluxDB database with an appropriate name. Create a user or token for that DB that has write permissions (read permissions are not required).
 
 # Recommended Setup
 Clone the repository and build the image as you see fit using the included Dockerfile.
@@ -60,6 +60,8 @@ Invalid
   - The username with write permissions to the outlined database ***must be declared with OPENWEATHER_INFLUXDB_DBPASS***
 - OPENWEATHER_INFLUXDB_DBPASS
   - The password for the provided username to the outlined database ***must be declared with OPENWEATHER_INFLUXDB_DBUSER***
+- OPENWEATHER_INFLUXDB_TOKEN
+  - The token to use to connect to InfluxDB v2 or cloud
 
 # Final Notes
 I made this for myself. I'm using it to track pollution in my area and dump the stats into Grafana. If you have questions, feel free to reach out. If you have PRs, those are always welcome.
